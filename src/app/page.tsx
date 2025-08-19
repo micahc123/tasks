@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Task = {
   id: string;
@@ -11,6 +11,26 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [input, setInput] = useState("");
   const [removing, setRemoving] = useState<Set<string>>(new Set());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("tasks");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const valid = parsed.filter((t) => t && typeof t.id === "string" && typeof t.text === "string");
+        setTasks(valid);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+    } catch {}
+  }, [tasks]);
 
   const addTask = () => {
     const value = input.trim();
@@ -31,7 +51,39 @@ export default function Home() {
         copy.delete(id);
         return copy;
       });
+      if (editingId === id) {
+        setEditingId(null);
+        setEditText("");
+      }
     }, 180);
+  };
+
+  const startEdit = (id: string, text: string) => {
+    setEditingId(id);
+    setEditText(text);
+  };
+
+  const commitEdit = () => {
+    if (!editingId) return;
+    const value = editText.trim();
+    if (!value) {
+      setEditingId(null);
+      setEditText("");
+      return;
+    }
+    setTasks((prev) => prev.map((t) => (t.id === editingId ? { ...t, text: value } : t)));
+    setEditingId(null);
+    setEditText("");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText("");
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") commitEdit();
+    if (e.key === "Escape") cancelEdit();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -52,6 +104,7 @@ export default function Home() {
         <ul className="flex flex-col gap-3">
           {tasks.map((task) => {
             const isRemoving = removing.has(task.id);
+            const isEditing = editingId === task.id;
             return (
               <li
                 key={task.id}
@@ -61,15 +114,28 @@ export default function Home() {
                 }
               >
                 <input
-                  id={task.id}
                   type="checkbox"
                   onChange={() => removeTask(task.id)}
-                  className="size-5 rounded-sm border border-neutral-400/70 dark:border-neutral-600/70 bg-white dark:bg-neutral-800 accent-neutral-900 dark:accent-neutral-200 cursor-pointer transition-transform duration-150 ease-out hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-600"
+                  className="size-5 shrink-0 rounded-full border-2 border-neutral-400/70 dark:border-neutral-600/70 bg-transparent appearance-none cursor-pointer transition-transform duration-150 ease-out hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-600 hover:border-neutral-500 dark:hover:border-neutral-500 checked:bg-transparent checked:border-neutral-900 dark:checked:border-neutral-200"
                   aria-label={task.text}
                 />
-                <label htmlFor={task.id} className="cursor-pointer">
-                  {task.text}
-                </label>
+                {isEditing ? (
+                  <input
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={handleEditKeyDown}
+                    className="flex-1 min-w-0 bg-transparent outline-none text-lg py-1"
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startEdit(task.id, task.text)}
+                    className="flex-1 min-w-0 text-left bg-transparent outline-none cursor-text truncate"
+                  >
+                    {task.text}
+                  </button>
+                )}
               </li>
             );
           })}
